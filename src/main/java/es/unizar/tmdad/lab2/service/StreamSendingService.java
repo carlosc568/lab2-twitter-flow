@@ -69,8 +69,11 @@ public class StreamSendingService {
 		//
 		// CAMBIOS A REALIZAR:
 		//
-		// Crea un mensaje que envie un tweet a un único tópico destinatario
+		// Crea un mensaje que envie un tweet a un unico topico destinatario
 		//
+		Map<String, Object> m = new HashMap<>();
+ 		m.put(MessageHeaders.CONTENT_TYPE, MimeTypeUtils.APPLICATION_JSON);
+ 		ops.convertAndSend("/queue/search/" + tweet.getFirstTarget(), tweet.getTweet(), m);
 
 	}
 

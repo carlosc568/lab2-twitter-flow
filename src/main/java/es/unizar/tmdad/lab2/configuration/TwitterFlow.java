@@ -10,13 +10,24 @@ import org.springframework.integration.config.EnableIntegration;
 import org.springframework.integration.dsl.IntegrationFlow;
 import org.springframework.integration.dsl.IntegrationFlows;
 import org.springframework.social.twitter.api.StreamListener;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.social.twitter.api.Tweet;
+import es.unizar.tmdad.lab2.domain.MyTweet;
+import es.unizar.tmdad.lab2.domain.TargetedTweet;
+import es.unizar.tmdad.lab2.service.TwitterLookupService;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.Collectors;
 
 @Configuration
 @EnableIntegration
 @IntegrationComponentScan
 @ComponentScan
 public class TwitterFlow {
-
+	
+	@Autowired
+	private TwitterLookupService lookupService;
+	
 	@Bean
 	public DirectChannel requestChannel() {
 		return new DirectChannel();
@@ -31,14 +42,25 @@ public class TwitterFlow {
         // CAMBIOS A REALIZAR:
         //
         // Usando Spring Integration DSL
-        //
-        // Filter --> asegurarnos que el mensaje es un Tweet
-        // Transform --> convertir un Tweet en un TargetedTweet con tantos tópicos como coincida
-        // Split --> dividir un TargetedTweet con muchos tópicos en tantos TargetedTweet como tópicos haya
-        // Transform --> señalar el contenido de un TargetedTweet
-        //
-		return IntegrationFlows.from(requestChannel()).
-				handle("streamSendingService", "sendTweet").get();
+		return IntegrationFlows.from(requestChannel())
+				 // Filter --> asegurarnos que el mensaje es un Tweet
+				.filter((Object o) -> o instanceof Tweet)
+				 // Transform --> convertir un Tweet en un TargetedTweet con tantos tópicos como coincida
+				.<Tweet,TargetedTweet>transform(t -> { MyTweet tweet = new MyTweet(t);
+					List<String> topics = lookupService.getQueries().stream()
+					.filter(q -> tweet.getUnmodifiedText().contains(q))
+					.collect(Collectors.toList());
+					return new TargetedTweet(tweet,topics);
+				// Split --> dividir un TargetedTweet con muchos tópicos en tantos TargetedTweet como tópicos haya
+				}).split(TargetedTweet.class, t -> {
+					List<TargetedTweet> l = new ArrayList<TargetedTweet>(t.getTargets().size());
+					for (String s : t.getTargets()) l.add(new TargetedTweet(t.getTweet(), s));
+					return l;
+				// Transform --> señalar el contenido de un TargetedTweet
+				}).<TargetedTweet,TargetedTweet>transform(t -> {
+					t.getTweet().setUnmodifiedText(t.getTweet().getUnmodifiedText().replaceAll(t.getFirstTarget(), "<big><strong>"+ t.getFirstTarget() +"</strong></big>"));
+					return t;				
+				}).handle("streamSendingService", "sendTweet").get();
 	}
 
 }
